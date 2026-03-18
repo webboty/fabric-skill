@@ -1,0 +1,140 @@
+#!/bin/bash
+# fabric-provider - Switch between OpenAI and LM Studio providers
+#
+# IMPORTANT: Store your credentials in the same directory as this script:
+#   skill.env (gitignored, not published)
+#
+# Format:
+#   OPENAI_API_KEY=your-key-here
+#   OPENAI_URL=https://api.openai.com/v1
+#   LMSTUDIO_URL=http://192.168.1.141:11435/v1
+#   LMSTUDIO_KEY=ignored
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_ENV="$SCRIPT_DIR/skill.env"
+CONFIG_FILE="$HOME/.config/fabric/.env"
+
+load_skill_env() {
+    if [ -f "$SKILL_ENV" ]; then
+        source "$SKILL_ENV"
+    elif [ -f "$SKILL_ENV.example" ]; then
+        echo "⚠️  skill.env not found. Run: fabric-provider setup"
+        echo "   Or copy from template: cp skill.env.example skill.env"
+        echo ""
+    fi
+    
+    # Set defaults if not in skill.env
+    OPENAI_URL="${OPENAI_URL:-https://api.openai.com/v1}"
+    LMSTUDIO_URL="${LMSTUDIO_URL:-http://192.168.1.141:11435/v1}"
+    LMSTUDIO_KEY="${LMSTUDIO_KEY:-ignored}"
+}
+
+usage() {
+    echo "Usage: fabric-provider [openai|lmstudio|status|setup]"
+    echo ""
+    echo "  openai    - Switch to OpenAI cloud"
+    echo "  lmstudio  - Switch to LM Studio local"
+    echo "  status    - Show current provider configuration"
+    echo "  setup     - Configure credentials (creates skill.env)"
+    echo ""
+    exit 1
+}
+
+show_status() {
+    echo "Current Fabric Provider Configuration:"
+    echo "======================================"
+    
+    if grep -q "OPENAI_API_BASE_URL=$OPENAI_URL" "$CONFIG_FILE" 2>/dev/null; then
+        echo "Provider: OpenAI (Cloud)"
+        echo "Endpoint: $OPENAI_URL"
+        echo "Models: gpt-4o, gpt-5, o3, etc."
+    elif grep -q "OPENAI_API_BASE_URL=$LMSTUDIO_URL" "$CONFIG_FILE" 2>/dev/null; then
+        echo "Provider: LM Studio (Local)"
+        echo "Endpoint: $LMSTUDIO_URL"
+        echo ""
+        echo "Available local models:"
+        curl -s --max-time 5 "$LMSTUDIO_URL/models" 2>/dev/null | grep -o '"id":"[^"]*"' | sed 's/"id":"//;s/"//' | head -10 || echo "  (could not reach endpoint)"
+    else
+        echo "Provider: Custom/OpenAI-compatible"
+        grep "OPENAI_API_BASE_URL" "$CONFIG_FILE" 2>/dev/null || echo "Not configured"
+    fi
+    
+    echo ""
+    grep "^DEFAULT_VENDOR=" "$CONFIG_FILE" 2>/dev/null || echo "DEFAULT_VENDOR=not set"
+    grep "^DEFAULT_MODEL=" "$CONFIG_FILE" 2>/dev/null || echo "DEFAULT_MODEL=not set"
+}
+
+setup_credentials() {
+    echo "Setting up Fabric credentials..."
+    echo ""
+    
+    read -p "OpenAI API Key: " openai_key
+    read -p "OpenAI Endpoint [https://api.openai.com/v1]: " openai_url
+    read -p "LM Studio URL [http://192.168.1.141:11435/v1]: " lmstudio_url
+    
+    openai_url="${openai_url:-https://api.openai.com/v1}"
+    lmstudio_url="${lmstudio_url:-http://192.168.1.141:11435/v1}"
+    
+    cat > "$SKILL_ENV" << EOF
+# Fabric Skill Credentials (DO NOT COMMIT THIS FILE)
+# Add to .gitignore: skill.env
+
+OPENAI_API_KEY=${openai_key}
+OPENAI_URL=${openai_url}
+LMSTUDIO_URL=${lmstudio_url}
+LMSTUDIO_KEY=ignored
+EOF
+    
+    echo ""
+    echo "✅ Credentials saved to $SKILL_ENV"
+    echo "   This file is gitignored and won't be published."
+}
+
+switch_to_openai() {
+    if [ -z "$OPENAI_API_KEY" ]; then
+        echo "❌ OpenAI API key not configured. Run: fabric-provider setup"
+        exit 1
+    fi
+    
+    echo "Switching to OpenAI (cloud)..."
+    sed -i '' 's|OPENAI_API_BASE_URL=.*|OPENAI_API_BASE_URL='"$OPENAI_URL"'|' "$CONFIG_FILE"
+    sed -i '' 's|OPENAI_API_KEY=.*|OPENAI_API_KEY='"$OPENAI_API_KEY"'|' "$CONFIG_FILE"
+    sed -i '' 's|DEFAULT_VENDOR=.*|DEFAULT_VENDOR=OpenAI|' "$CONFIG_FILE"
+    sed -i '' 's|DEFAULT_MODEL=.*|DEFAULT_MODEL=gpt-4o|' "$CONFIG_FILE"
+    echo "✅ Done! Now using OpenAI cloud."
+    echo ""
+    show_status
+}
+
+switch_to_lmstudio() {
+    echo "Switching to LM Studio (local)..."
+    sed -i '' 's|OPENAI_API_BASE_URL=.*|OPENAI_API_BASE_URL='"$LMSTUDIO_URL"'|' "$CONFIG_FILE"
+    sed -i '' 's|OPENAI_API_KEY=.*|OPENAI_API_KEY='"$LMSTUDIO_KEY"'|' "$CONFIG_FILE"
+    sed -i '' 's|DEFAULT_VENDOR=.*|DEFAULT_VENDOR=OpenAI|' "$CONFIG_FILE"
+    sed -i '' 's|DEFAULT_MODEL=.*|DEFAULT_MODEL=openai/gpt-oss-120b|' "$CONFIG_FILE"
+    echo "✅ Done! Now using LM Studio local endpoint."
+    echo ""
+    show_status
+}
+
+# Load credentials first
+load_skill_env
+
+# Main
+case "${1:-}" in
+    openai)
+        switch_to_openai
+        ;;
+    lmstudio)
+        switch_to_lmstudio
+        ;;
+    status)
+        show_status
+        ;;
+    setup)
+        setup_credentials
+        ;;
+    *)
+        usage
+        ;;
+esac

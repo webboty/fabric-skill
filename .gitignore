@@ -1,0 +1,14 @@
+# Credentials (NEVER commit these)
+*.env
+skill.env
+*.local
+credentials.json
+
+# OS files
+.DS_Store
+*.swp
+*~
+
+# IDE
+.vscode/
+.idea/
