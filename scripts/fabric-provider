@@ -1,6 +1,8 @@
 #!/bin/bash
 # fabric-provider - Switch between OpenAI and LM Studio providers
 #
+# Cross-platform: Works on macOS, Linux, and Windows (WSL/Git Bash)
+#
 # IMPORTANT: Store your credentials in the same directory as this script:
 #   skill.env (gitignored, not published)
 #
@@ -13,6 +15,14 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_ENV="$SCRIPT_DIR/skill.env"
 CONFIG_FILE="$HOME/.config/fabric/.env"
+
+# Detect platform for sed -i compatibility
+# macOS: sed -i '' (needs empty string after -i)
+# Linux/WSL: sed -i (no extra argument)
+SED_I_FLAG=""
+if [[ "$(uname)" == "Darwin" ]]; then
+    SED_I_FLAG="''"
+fi
 
 load_skill_env() {
     if [ -f "$SKILL_ENV" ]; then
@@ -30,20 +40,23 @@ load_skill_env() {
 }
 
 usage() {
-    echo "Usage: fabric-provider [openai|lmstudio|status|setup]"
+    echo "Usage: fabric-provider [openai|lmstudio|status|setup|list]"
     echo ""
     echo "  openai    - Switch to OpenAI cloud"
     echo "  lmstudio  - Switch to LM Studio local"
     echo "  status    - Show current provider configuration"
     echo "  setup     - Configure credentials (creates skill.env)"
+    echo "  list      - List available local models"
     echo ""
+    echo "Platforms: macOS ✓ | Linux ✓ | Windows (WSL/Git Bash) ✓"
     exit 1
 }
 
 show_status() {
-    echo "Current Fabric Provider Configuration:"
-    echo "======================================"
+    echo "Fabric Provider Configuration"
+    echo "================================"
     
+    # Check current provider
     if grep -q "OPENAI_API_BASE_URL=$OPENAI_URL" "$CONFIG_FILE" 2>/dev/null; then
         echo "Provider: OpenAI (Cloud)"
         echo "Endpoint: $OPENAI_URL"
@@ -62,6 +75,24 @@ show_status() {
     echo ""
     grep "^DEFAULT_VENDOR=" "$CONFIG_FILE" 2>/dev/null || echo "DEFAULT_VENDOR=not set"
     grep "^DEFAULT_MODEL=" "$CONFIG_FILE" 2>/dev/null || echo "DEFAULT_MODEL=not set"
+}
+
+list_models() {
+    echo "Available Local Models"
+    echo "================================"
+    
+    # Try multiple LM Studio URLs
+    for url in "$LMSTUDIO_URL" "http://localhost:11435/v1"; do
+        models=$(curl -s --max-time 5 "$url/models" 2>/dev/null)
+        if [ -n "$models" ]; then
+            echo "$models" | grep -o '"id":"[^"]*"' | sed 's/"id":"//;s/"//' | sort | uniq
+            return 0
+        fi
+    done
+    
+    echo "Could not reach LM Studio endpoint"
+    echo "Make sure LM Studio is running and the API is enabled"
+    return 1
 }
 
 setup_credentials() {
@@ -97,10 +128,10 @@ switch_to_openai() {
     fi
     
     echo "Switching to OpenAI (cloud)..."
-    sed -i '' 's|OPENAI_API_BASE_URL=.*|OPENAI_API_BASE_URL='"$OPENAI_URL"'|' "$CONFIG_FILE"
-    sed -i '' 's|OPENAI_API_KEY=.*|OPENAI_API_KEY='"$OPENAI_API_KEY"'|' "$CONFIG_FILE"
-    sed -i '' 's|DEFAULT_VENDOR=.*|DEFAULT_VENDOR=OpenAI|' "$CONFIG_FILE"
-    sed -i '' 's|DEFAULT_MODEL=.*|DEFAULT_MODEL=gpt-4o|' "$CONFIG_FILE"
+    sed -i $SED_I_FLAG 's|OPENAI_API_BASE_URL=.*|OPENAI_API_BASE_URL='"$OPENAI_URL"'|' "$CONFIG_FILE"
+    sed -i $SED_I_FLAG 's|OPENAI_API_KEY=.*|OPENAI_API_KEY='"$OPENAI_API_KEY"'|' "$CONFIG_FILE"
+    sed -i $SED_I_FLAG 's|DEFAULT_VENDOR=.*|DEFAULT_VENDOR=OpenAI|' "$CONFIG_FILE"
+    sed -i $SED_I_FLAG 's|DEFAULT_MODEL=.*|DEFAULT_MODEL=gpt-4o|' "$CONFIG_FILE"
     echo "✅ Done! Now using OpenAI cloud."
     echo ""
     show_status
@@ -108,10 +139,10 @@ switch_to_openai() {
 
 switch_to_lmstudio() {
     echo "Switching to LM Studio (local)..."
-    sed -i '' 's|OPENAI_API_BASE_URL=.*|OPENAI_API_BASE_URL='"$LMSTUDIO_URL"'|' "$CONFIG_FILE"
-    sed -i '' 's|OPENAI_API_KEY=.*|OPENAI_API_KEY='"$LMSTUDIO_KEY"'|' "$CONFIG_FILE"
-    sed -i '' 's|DEFAULT_VENDOR=.*|DEFAULT_VENDOR=OpenAI|' "$CONFIG_FILE"
-    sed -i '' 's|DEFAULT_MODEL=.*|DEFAULT_MODEL=openai/gpt-oss-120b|' "$CONFIG_FILE"
+    sed -i $SED_I_FLAG 's|OPENAI_API_BASE_URL=.*|OPENAI_API_BASE_URL='"$LMSTUDIO_URL"'|' "$CONFIG_FILE"
+    sed -i $SED_I_FLAG 's|OPENAI_API_KEY=.*|OPENAI_API_KEY='"$LMSTUDIO_KEY"'|' "$CONFIG_FILE"
+    sed -i $SED_I_FLAG 's|DEFAULT_VENDOR=.*|DEFAULT_VENDOR=OpenAI|' "$CONFIG_FILE"
+    sed -i $SED_I_FLAG 's|DEFAULT_MODEL=.*|DEFAULT_MODEL=openai/gpt-oss-120b|' "$CONFIG_FILE"
     echo "✅ Done! Now using LM Studio local endpoint."
     echo ""
     show_status
@@ -133,6 +164,9 @@ case "${1:-}" in
         ;;
     setup)
         setup_credentials
+        ;;
+    list)
+        list_models
         ;;
     *)
         usage

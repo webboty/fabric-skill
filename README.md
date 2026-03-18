@@ -224,6 +224,16 @@ docker run --rm -it kayvan/fabric:latest
 npx skills add fabric
 ```
 
+### Requirements
+
+| Platform | Supported | Shell Required |
+|----------|-----------|----------------|
+| **macOS** | ✅ Full | bash/zsh (built-in) |
+| **Linux** | ✅ Full | bash (built-in) |
+| **Windows** | ✅ With WSL | WSL or Git Bash |
+
+> **Note:** The `fabric-provider` script requires **bash**. On Windows, use WSL (Windows Subsystem for Linux) or Git Bash.
+
 ### Configure Fabric
 
 ```bash
