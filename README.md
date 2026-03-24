@@ -102,7 +102,7 @@ echo "Your content here" | fabric -p summarize
 **Then load this skill into your AI assistant:**
 
 ```bash
-npx skills add fabric
+npx skills add webboty/fabric-skill@fabric
 ```
 
 **You're now an AI power user.**
@@ -221,7 +221,14 @@ docker run --rm -it kayvan/fabric:latest
 ### Install This Skill
 
 ```bash
-npx skills add fabric
+npx skills add webboty/fabric-skill@fabric
+```
+
+Or clone and install locally:
+
+```bash
+git clone https://github.com/webboty/fabric-skill.git
+npx skills add ./fabric-skill
 ```
 
 ### Requirements
